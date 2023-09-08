@@ -22,7 +22,7 @@
 #define DISPLAY_PIXEL_FORMAT SCE_DISPLAY_PIXELFORMAT_A8B8G8R8
 
 struct clear_vertex {
-	float x, y, z;
+	float x, y;
 };
 
 struct position {
@@ -110,6 +110,9 @@ int main(int argc, char *argv[])
 {
 	int i;
 
+	gxm_front_buffer_index = DISPLAY_BUFFER_COUNT - 1;
+	gxm_back_buffer_index = 0;
+
 	SceGxmInitializeParams gxm_init_params;
 	memset(&gxm_init_params, 0, sizeof(gxm_init_params));
 	gxm_init_params.flags = 0;
@@ -135,7 +138,7 @@ int main(int argc, char *argv[])
 	unsigned int fragment_usse_offset;
 	fragment_usse_ring_buffer_addr = gpu_fragment_usse_alloc_map(
 		SCE_GXM_DEFAULT_FRAGMENT_USSE_RING_BUFFER_SIZE,
-		&fragment_ring_buffer_uid, &fragment_usse_offset);
+		&fragment_usse_ring_buffer_uid, &fragment_usse_offset);
 
 	SceGxmContextParams gxm_context_params;
 	memset(&gxm_context_params, 0, sizeof(gxm_context_params));
@@ -274,7 +277,7 @@ int main(int argc, char *argv[])
 
 	sceGxmShaderPatcherCreateFragmentProgram(gxm_shader_patcher,
 		gxm_clear_fragment_program_id, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
-		SCE_GXM_MULTISAMPLE_NONE, NULL, clear_fragment_program,
+		SCE_GXM_MULTISAMPLE_NONE, NULL, clear_vertex_program,
 		&gxm_clear_fragment_program_patched);
 
 	SceUID clear_vertices_uid;
@@ -304,8 +307,6 @@ int main(int argc, char *argv[])
 
 	const SceGxmProgram *basic_vertex_program =
 		sceGxmShaderPatcherGetProgramFromId(gxm_basic_vertex_program_id);
-	const SceGxmProgram *basic_fragment_program =
-		sceGxmShaderPatcherGetProgramFromId(gxm_basic_fragment_program_id);
 
 	gxm_basic_vertex_program_position_param = sceGxmProgramFindParameterByName(
 		basic_vertex_program, "position");
@@ -345,7 +346,7 @@ int main(int argc, char *argv[])
 
 	sceGxmShaderPatcherCreateFragmentProgram(gxm_shader_patcher,
 		gxm_basic_fragment_program_id, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
-		SCE_GXM_MULTISAMPLE_NONE, NULL, basic_fragment_program,
+		SCE_GXM_MULTISAMPLE_NONE, NULL, basic_vertex_program,
 		&gxm_basic_fragment_program_patched);
 
 	SceUID cube_mesh_uid;
@@ -449,13 +450,15 @@ int main(int argc, char *argv[])
 			sceGxmSetVertexProgram(gxm_context, gxm_clear_vertex_program_patched);
 			sceGxmSetFragmentProgram(gxm_context, gxm_clear_fragment_program_patched);
 
+			sceGxmSetFrontDepthFunc(gxm_context, SCE_GXM_DEPTH_FUNC_ALWAYS);
+
 			static const float clear_color[4] = {
 				1.0f, 1.0f, 1.0f, 1.0f
 			};
 
-			void *uniform_buffer;
-			sceGxmReserveFragmentDefaultUniformBuffer(gxm_context, &uniform_buffer);
-			sceGxmSetUniformDataF(uniform_buffer, gxm_clear_fragment_program_u_clear_color_param,
+			void *default_uniform_buffer;
+			sceGxmReserveFragmentDefaultUniformBuffer(gxm_context, &default_uniform_buffer);
+			sceGxmSetUniformDataF(default_uniform_buffer, gxm_clear_fragment_program_u_clear_color_param,
 				0, sizeof(clear_color) / sizeof(float), clear_color);
 
 			sceGxmSetVertexStream(gxm_context, 0, clear_vertices_data);
@@ -469,6 +472,8 @@ int main(int argc, char *argv[])
 		{
 			sceGxmSetVertexProgram(gxm_context, gxm_basic_vertex_program_patched);
 			sceGxmSetFragmentProgram(gxm_context, gxm_basic_fragment_program_patched);
+
+			sceGxmSetFrontDepthFunc(gxm_context, SCE_GXM_DEPTH_FUNC_LESS_EQUAL);
 
 			/*
 			 * Transform the cube position / rotation
@@ -484,21 +489,16 @@ int main(int argc, char *argv[])
 			/*
 			 * Upload the uniforms to the GPU
 			 */
-			void *u_model_matrix_buffer;
-			sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &u_model_matrix_buffer);
-			sceGxmSetUniformDataF(u_model_matrix_buffer,
+			void *default_uniform_buffer;
+			sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &default_uniform_buffer);
+
+			sceGxmSetUniformDataF(default_uniform_buffer,
 				gxm_basic_vertex_program_u_model_matrix_param,
 				0, sizeof(model_matrix) / sizeof(float), (float *)model_matrix);
-
-			void *u_view_matrix_buffer;
-			sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &u_view_matrix_buffer);
-			sceGxmSetUniformDataF(u_view_matrix_buffer,
+			sceGxmSetUniformDataF(default_uniform_buffer,
 				gxm_basic_vertex_program_u_view_matrix_param,
 				0, sizeof(view_matrix) / sizeof(float), (float *)view_matrix);
-
-			void *u_projection_matrix_buffer;
-			sceGxmReserveVertexDefaultUniformBuffer(gxm_context, &u_projection_matrix_buffer);
-			sceGxmSetUniformDataF(u_projection_matrix_buffer,
+			sceGxmSetUniformDataF(default_uniform_buffer,
 				gxm_basic_vertex_program_u_projection_matrix_param,
 				0, sizeof(projection_matrix) / sizeof(float), (float *)projection_matrix);
 
@@ -636,6 +636,9 @@ void *gpu_vertex_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_off
 	if (sceGxmMapVertexUsseMemory(addr, size, usse_offset) < 0)
 		return NULL;
 
+	if (uid)
+		*uid = memuid;
+
 	return addr;
 }
 
@@ -668,6 +671,9 @@ void *gpu_fragment_usse_alloc_map(size_t size, SceUID *uid, unsigned int *usse_o
 
 	if (sceGxmMapFragmentUsseMemory(addr, size, usse_offset) < 0)
 		return NULL;
+
+	if (uid)
+		*uid = memuid;
 
 	return addr;
 }
