@@ -87,11 +87,11 @@ vita_create_vpk(${SHORT_NAME}.vpk ${VITA_TITLEID} ${SHORT_NAME}.self
 )
 
 add_custom_target(vpksend
-	COMMAND curl -T ${SHORT_NAME}.vpk ftp://$(PSVITAIP):1337/ux0:/
+	COMMAND curl -T ${SHORT_NAME}.vpk ftp://$ENV{PSVITAIP}:1337/ux0:/
 	DEPENDS ${SHORT_NAME}.vpk
 )
 
 add_custom_target(send
-	COMMAND curl -T ${SHORT_NAME}.self ftp://$(PSVITAIP):1337/ux0:/app/${VITA_TITLEID}/eboot.bin
+	COMMAND curl -T ${SHORT_NAME}.self ftp://$ENV{PSVITAIP}:1337/ux0:/app/${VITA_TITLEID}/eboot.bin
 	DEPENDS ${SHORT_NAME}.self
 )
