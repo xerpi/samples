@@ -36,7 +36,7 @@ foreach(shader ${VERTEX_SHADERS})
 	get_filename_component(shader_we ${shader} NAME_WE)
 	add_custom_command(OUTPUT "${shader_we}.gxp"
 		COMMAND $ENV{PSP2CGC} -profile sce_vp_psp2 "${PROJECT_SOURCE_DIR}/${shader}"
-			-o "${CMAKE_BINARY_DIR}/${shader_we}.gxp"
+			-o "${shader_we}.gxp"
 		DEPENDS ${shader}
 		COMMENT "Compiling ${shader} to ${shader_we}.gxp"
 	)
@@ -47,7 +47,7 @@ foreach(shader ${FRAGMENT_SHADERS})
 	get_filename_component(shader_we ${shader} NAME_WE)
 	add_custom_command(OUTPUT "${shader_we}.gxp"
 		COMMAND $ENV{PSP2CGC} -profile sce_fp_psp2 "${PROJECT_SOURCE_DIR}/${shader}"
-			-o "${CMAKE_BINARY_DIR}/${shader_we}.gxp"
+			-o "${shader_we}.gxp"
 		DEPENDS ${shader}
 		COMMENT "Compiling ${shader} to ${shader_we}.gxp"
 	)
@@ -58,9 +58,8 @@ foreach(gxp ${SHADER_GXPS})
 	get_filename_component(gxp_we ${gxp} NAME_WE)
 	add_custom_command(OUTPUT "${gxp_we}_gxp.o"
 		COMMAND arm-vita-eabi-objcopy --input binary --output elf32-littlearm
-			--binary-architecture arm "${gxp}"
-			"${CMAKE_BINARY_DIR}/${gxp_we}_gxp.o"
-		WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+			--binary-architecture arm "${gxp}" "${gxp_we}_gxp.o"
+		WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 		DEPENDS ${gxp}
 		COMMENT "Objcopying ${gxp} to ${gxp_we}_gxp.o"
 	)
@@ -84,14 +83,4 @@ vita_create_self(${SHORT_NAME}.self ${SHORT_NAME})
 vita_create_vpk(${SHORT_NAME}.vpk ${VITA_TITLEID} ${SHORT_NAME}.self
   VERSION ${VITA_VERSION}
   NAME ${VITA_APP_NAME}
-)
-
-add_custom_target(vpksend
-	COMMAND curl -T ${SHORT_NAME}.vpk ftp://$ENV{PSVITAIP}:1337/ux0:/
-	DEPENDS ${SHORT_NAME}.vpk
-)
-
-add_custom_target(send
-	COMMAND curl -T ${SHORT_NAME}.self ftp://$ENV{PSVITAIP}:1337/ux0:/app/${VITA_TITLEID}/eboot.bin
-	DEPENDS ${SHORT_NAME}.self
 )
